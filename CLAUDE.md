@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository is the solution to the task brief `PRUEBA ANALISTA DE INNOVACION 2026 (1) (3) (2) (2).docx`, a 24-hour technical test for a Data Science Analyst role. The brief is in Spanish. All data in it is fictitious and is used only for evaluation. To read the brief: `pandoc "<file>.docx" -t plain`. User-facing docs (`README.md`) and code comments are in Spanish.
 
-Part 1 (the RPA) is done. Part 2 (extraction to CSV) is pending.
+Both parts are implemented. The remaining deliverable is writing the answers into the .docx.
 
 ## Commands
 
@@ -14,6 +14,7 @@ Part 1 (the RPA) is done. Part 2 (extraction to CSV) is pending.
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python rpa_descarga.py            # Part 1: downloads only missing/invalid PDFs; no CapSolver call if none
 .venv/bin/python rpa_descarga.py --force    # re-download everything (costs 2 CapSolver tokens per CUFE)
+.venv/bin/python extraer_facturas.py        # Part 2: PDFs -> output/csv/<cufe>.csv + output/facturas.csv (offline)
 ```
 
 There are no tests. The CapSolver API key is read from `.env` as `capsolver_key`, with `CAPSOLVER_API_KEY` as a fallback. Never print it.
@@ -74,3 +75,11 @@ The brief also asks for a report of the time each step took and of the process's
 - Python code.
 - A GitHub repository with a clear README.
 - The answers written back into the original .docx.
+
+## Part 2 architecture
+
+- `extraer_facturas.py` imports `pendientes`, `read_inputs` and `DEFAULT_NIT` from `rpa_descarga.py`.
+  It refuses to run if any PDF is missing, so it never triggers downloads or CapSolver.
+- The PDFs have a text layer, so pdfplumber is used and there is no OCR.
+- The product table is found by its header names. Cell text is rebuilt from `page.chars` and the lines are joined **without a separator**, because the PDF wraps mid-word and keeps the trailing space when the wrap falls on a space.
+- Each invoice is validated by comparing `sum(cantidad*precio_unitario)` with the PDF's `Subtotal`. A mismatch sets `estado=revisar` in `metrics_extraccion.csv`.
