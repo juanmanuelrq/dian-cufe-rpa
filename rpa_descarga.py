@@ -48,6 +48,43 @@ def unlock(src: Path, dst: Path, password: str) -> None:
         writer.write(fh)
 
 
+def pdf_valido(path: Path, password: str) -> bool:
+    """True si el archivo existe, es un PDF y se puede abrir con la contraseña (NIT)."""
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        with path.open("rb") as fh:
+            if fh.read(4) != b"%PDF":
+                return False
+        reader = PdfReader(path)
+        if reader.is_encrypted and not reader.decrypt(password):
+            return False
+        return len(reader.pages) > 0
+    except Exception:
+        return False
+
+
+def pendientes(items: list[tuple[str, str]], out: Path, force: bool = False) -> list[tuple[str, str]]:
+    """CUFEs que necesitan descarga (y, por tanto, CapSolver). No hace llamadas de red.
+
+    Si el PDF original ya es válido pero falta su copia sin clave, la regenera localmente.
+    Pensada también para la Parte 2: comprobar antes de extraer que todos los PDF existen.
+    """
+    pdf_dir, unlocked_dir = out / "pdfs", out / "pdfs_sin_clave"
+    unlocked_dir.mkdir(parents=True, exist_ok=True)
+    todo = []
+    for cufe, nit in items:
+        pdf_path = pdf_dir / f"{cufe}.pdf"
+        if force or not pdf_valido(pdf_path, nit):
+            todo.append((cufe, nit))
+            continue
+        copia = unlocked_dir / f"{cufe}.pdf"
+        if not pdf_valido(copia, nit):
+            unlock(pdf_path, copia, nit)
+            log.info("%s… copia sin clave regenerada desde el original (sin CapSolver)", cufe[:12])
+    return todo
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--input", type=Path, default=Path("cufes.txt"))
@@ -62,11 +99,20 @@ def main() -> int:
     pdf_dir.mkdir(parents=True, exist_ok=True)
     unlocked_dir.mkdir(parents=True, exist_ok=True)
 
+    items = read_inputs(args.input, args.nit)
+
+    # Control de costo: se decide qué descargar ANTES de tocar la API de CapSolver.
+    todo = set(pendientes(items, args.out, args.force))
+    if not todo:
+        log.info("Los %d PDF ya están descargados y son válidos: no se llama a CapSolver ni a la DIAN.", len(items))
+        log.info("Use --force para volver a descargarlos.")
+        return 0
+    log.info("%d de %d CUFEs pendientes de descarga", len(todo), len(items))
+
     solver = CapSolverSolver()
     balance0 = solver.balance()
     log.info("Saldo CapSolver inicial: US$%.4f", balance0)
 
-    items = read_inputs(args.input, args.nit)
     metrics = []
     run_start = time.perf_counter()
     run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -77,8 +123,8 @@ def main() -> int:
         row = {"n": n, "cufe": cufe, "nit": nit, "estado": "", "intentos": 0, "bytes": 0, "error": "",
                **{p: 0.0 for p in PHASES}, "total_s": 0.0, "inicio": datetime.now().isoformat(timespec="seconds")}
 
-        if pdf_path.exists() and not args.force:
-            log.info("[%d/%d] %s… ya existe, se omite", n, len(items), short)
+        if (cufe, nit) not in todo:
+            log.info("[%d/%d] %s… ya descargado y válido, se omite", n, len(items), short)
             row.update(estado="omitido", bytes=pdf_path.stat().st_size)
             metrics.append(row)
             continue

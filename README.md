@@ -28,6 +28,12 @@ cp .env.example .env        # y escribir la API key: capsolver_key=CAP-...
 .venv/bin/python rpa_descarga.py --input otros.csv --nit 123456789 --retries 5
 ```
 
+**Control de costo:** antes de crear el cliente de CapSolver, el script revisa cada PDF de `output/pdfs/`:
+que exista, empiece con `%PDF` y abra con el NIT. Si todos son válidos, termina sin llamar a CapSolver ni
+a la DIAN y sin pedir la API key. Solo se descargan, y solo gastan tokens, los PDF faltantes o corruptos.
+Si falta una copia sin clave, se regenera desde el original sin usar la red. La función
+`pendientes()` de `rpa_descarga.py` hace esta revisión y la Parte 2 también puede usarla.
+
 `cufes.txt` tiene un CUFE por línea. Se puede indicar un NIT distinto por factura con el formato `cufe,nit`.
 
 **Salidas en `output/`:**

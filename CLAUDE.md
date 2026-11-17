@@ -12,7 +12,7 @@ Part 1 (the RPA) is done. Part 2 (extraction to CSV) is pending.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python rpa_descarga.py            # Part 1: downloads PDFs for cufes.txt (skips existing)
+.venv/bin/python rpa_descarga.py            # Part 1: downloads only missing/invalid PDFs; no CapSolver call if none
 .venv/bin/python rpa_descarga.py --force    # re-download everything (costs 2 CapSolver tokens per CUFE)
 ```
 
