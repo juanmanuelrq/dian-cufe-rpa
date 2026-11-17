@@ -4,9 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-The repository has no code yet. Its only content is the task brief `PRUEBA ANALISTA DE INNOVACION 2026 (1) (3) (2) (2).docx`, a 24-hour technical test for a Data Science Analyst role. The brief is in Spanish. All data in it is fictitious and is used only for evaluation. To read the brief: `pandoc "<file>.docx" -t plain`, or unzip it and read `word/document.xml`.
+This repository is the solution to the task brief `PRUEBA ANALISTA DE INNOVACION 2026 (1) (3) (2) (2).docx`, a 24-hour technical test for a Data Science Analyst role. The brief is in Spanish. All data in it is fictitious and is used only for evaluation. To read the brief: `pandoc "<file>.docx" -t plain`. User-facing docs (`README.md`) and code comments are in Spanish.
 
-When you add build, run or test commands, record them here.
+Part 1 (the RPA) is done. Part 2 (extraction to CSV) is pending.
+
+## Commands
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python rpa_descarga.py            # Part 1: downloads PDFs for cufes.txt (skips existing)
+.venv/bin/python rpa_descarga.py --force    # re-download everything (costs 2 CapSolver tokens per CUFE)
+```
+
+There are no tests. The CapSolver API key is read from `.env` as `capsolver_key`, with `CAPSOLVER_API_KEY` as a fallback. Never print it.
+
+## Part 1 architecture (verified against the live site, Nov 2026)
+
+- The CAPTCHA is **Cloudflare Turnstile**, in interactive mode, and it is solved through **CapSolver** (`rpa/captcha.py`, task type `AntiTurnstileTaskProxyLess`).
+  - In headless Playwright, Cloudflare doesn't even serve the search form. That is why the flow is plain `requests`, not a browser.
+  - Do not try to auto-click the Turnstile checkbox. The user chose a paid solver, and the permission classifier blocks automating that click.
+- `rpa/dian.py` runs a 4-request flow:
+  1. GET the search form.
+  2. POST the CUFE, **the NIT (now required by the site)** and token #1.
+  3. Replay the auto-submitted `#postForm` to `/Document/ShowDocumentToPublic`.
+  4. POST `/Document/DownloadPDF` with **a second Turnstile token** in the `captcha` field.
+- The NIT given by the evaluator is `900156264`, the same for all 10 CUFEs. It is also the **password of the downloaded PDFs**.
+- Outputs:
+  - `output/pdfs/` holds the encrypted originals.
+  - `output/pdfs_sin_clave/` holds decrypted copies made with pypdf. Part 2 should read these.
+  - `output/metrics_rpa.csv` is an append-only log keyed by `run_id`. Skipped files are not logged.
+  - `output/debug/` is gitignored.
+- Invoice numbers do not share one prefix (`FEBQ-243564`, `CRIA-1406`, `FE-6599`…). In the PDF text, the labels and values are split across lines unless you use `pdftotext -layout`.
 
 ## The task
 
